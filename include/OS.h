@@ -10,9 +10,10 @@
 #include <pthread.h>
 #include <stdarg.h>
 
-#include <SupportDefs.h>
-#include <StorageDefs.h>
-
+/*
+*#include <SupportDefs.h>
+*#include <StorageDefs.h>
+*/
 
 #ifdef __cplusplus
 extern "C" {
