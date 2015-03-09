@@ -533,6 +533,9 @@ main(void)
 
 	/* Enable deferred processing of RNG samples */
 	rnd_init_softint();
+	
+	/* Enable BeOS inspired ports */
+	kport_init();
 
 #ifdef RND_PRINTF
 	/* Enable periodic injection of console output into entropy pool */
