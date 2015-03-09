@@ -187,6 +187,7 @@ file	kern/uipc_mbuf2.c		kern
 file	net/link_proto.c		kern	# XXX
 file	kern/uipc_proto.c		kern
 file	kern/uipc_sem.c			kern
+file	kern/uipc_port.c			kern
 file	kern/uipc_socket.c		kern
 file	kern/uipc_socket2.c		kern
 file	kern/uipc_syscalls.c		kern
