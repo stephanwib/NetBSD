@@ -50,6 +50,7 @@ static port_id port_next_id = 1;
 static kmutex_t kport_mutex;
 
 struct kport {
+  LIST_ENTRY(kport) kp_entry; /* global list entry */
   kmutex_t kp_interlock;  /* lock on this kport */
   kcondvar_t  kp_cv;  /* condition variable */
   port_id kp_id;  /* id of this port */
@@ -59,3 +60,11 @@ struct kport {
   uid_t kp_uid; /* creator uid */
   gid_t kp_gid; /* creator gid */
 };
+
+LIST_HEAD(kport_list, kport);
+static struct kport_list kport_head = LIST_HEAD_INITIALIZER(&kport_head);
+
+void kport_init(void)
+{
+  mutex_init(&kport_mutex, MUTEX_DEFAULT, IPL_NONE);
+}
