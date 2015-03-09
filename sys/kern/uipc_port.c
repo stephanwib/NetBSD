@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/mutex.h>
+#include <sys/proc.h>
 #include <OS.h>
 
 
@@ -47,3 +48,14 @@ static uint32_t port_max = PORT_MAX;
 static uint32_t nports = 0;
 static port_id port_next_id = 1;
 static kmutex_t kport_mutex;
+
+struct kport {
+  kmutex_t kp_interlock;  /* lock on this kport */
+  kcondvar_t  kp_cv;  /* condition variable */
+  port_id kp_id;  /* id of this port */
+  pid_t kp_owner; /* owner PID assigned to this port */
+  char *kp_name;  /* name of this port */
+  uint32_t kp_nmsg;  /* number of messages */
+  uid_t kp_uid; /* creator uid */
+  gid_t kp_gid; /* creator gid */
+};
