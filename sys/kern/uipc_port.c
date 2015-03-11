@@ -96,4 +96,19 @@ kport_lookup_byid(port_id id)
       return kp;
     }
   }
+  return NULL;
+}
+
+static struct kport *
+kport_lookup_byname(const char *name)
+{
+  struct kport *kp;
+  
+  KASSERT(mutex_owned(&kport_mutex));
+  LIST_FOREACH(kp, &kport_head, kp_entry) {
+    if (strcmp(kp->kp_name, name) == 0) {
+      return kp;
+    }
+  }
+  return NULL;
 }
