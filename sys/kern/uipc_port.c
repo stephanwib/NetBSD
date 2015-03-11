@@ -84,3 +84,16 @@ void kport_init(void)
 {
   mutex_init(&kport_mutex, MUTEX_DEFAULT, IPL_NONE);
 }
+
+static struct kport *
+kport_lookup_byid(port_id id)
+{
+  struct kport *kp;
+  
+  KASSERT(mutex_owned(&kport_mutex));
+  LIST_FOREACH(kp, &kport_head, kp_entry) {
+    if (kp->kp_id == id) {
+      return kp;
+    }
+  }
+}
