@@ -72,8 +72,8 @@ struct kp_msg {
   int32_t kp_msg_code;
   size_t kp_msg_size;
   uid_t kp_msg_sender_uid;
-  gid_t kp_msg_sender_group;
-  pit_t kp_msg_sender_pid;
+  gid_t kp_msg_sender_gid;
+  pid_t kp_msg_sender_pid;
   char *kp_msg_buffer;
 };
 
