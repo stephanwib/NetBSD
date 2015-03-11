@@ -49,6 +49,12 @@ static uint32_t nports = 0;
 static port_id port_next_id = 1;
 static kmutex_t kport_mutex;
 
+enum kp_state {
+  kp_unused = 0,
+  kp_active,
+  kp_deleted
+};
+
 struct kport {
   LIST_ENTRY(kport) kp_entry; /* global list entry */
   kmutex_t kp_interlock;  /* lock on this kport */
@@ -59,6 +65,16 @@ struct kport {
   uint32_t kp_nmsg;  /* number of messages */
   uid_t kp_uid; /* creator uid */
   gid_t kp_gid; /* creator gid */
+  int32_t kp_state; /* state of this port */
+};
+
+struct kp_msg {
+  int32_t kp_msg_code;
+  size_t kp_msg_size;
+  uid_t kp_msg_sender_uid;
+  gid_t kp_msg_sender_group;
+  pit_t kp_msg_sender_pid;
+  char *kp_msg_buffer;
 };
 
 LIST_HEAD(kport_list, kport);
