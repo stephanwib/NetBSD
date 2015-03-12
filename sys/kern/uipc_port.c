@@ -63,7 +63,7 @@ struct kport {
   port_id kp_id;  /* id of this port */
   pid_t kp_owner; /* owner PID assigned to this port */
   char *kp_name;  /* name of this port */
-  size_t kp_namelen; /* length of portname */
+  size_t kp_namelen; /* length of name */
   uint32_t kp_nmsg;  /* number of messages */
   uid_t kp_uid; /* creator uid */
   gid_t kp_gid; /* creator gid */
@@ -71,12 +71,12 @@ struct kport {
 };
 
 struct kp_msg {
-  int32_t kp_msg_code;
-  size_t kp_msg_size;
-  uid_t kp_msg_sender_uid;
-  gid_t kp_msg_sender_gid;
-  pid_t kp_msg_sender_pid;
-  char *kp_msg_buffer;
+  int32_t kp_msg_code; /* message code */
+  size_t kp_msg_size; /* bytes in message */
+  uid_t kp_msg_sender_uid; /* uid of sender */
+  gid_t kp_msg_sender_gid; /* gid of sender */
+  pid_t kp_msg_sender_pid; /* pid of sender */
+  char *kp_msg_buffer; /* message data */
 };
 
 LIST_HEAD(kport_list, kport);
@@ -133,5 +133,29 @@ kport_create(struct lwp *l, const char *name, struct kport **kpret)
   ret->kp_namelen = namelen + 1;
   ret->kp_name = kmem_alloc(ret->ks_namelen, KM_SLEEP);
   strlcpy(ret->kp_name, name, namelen + 1);
+  ret->kp_uid = kauth_cred_geteuid(uc);
+  ret->kp_gid = kauth_cred_getegid(uc);
+  ret->kp_owner = l->l_proc->p_pid;
+  ret->kp_nmsg = 0;
+  ret->kp_state = kp_unused;
+  mutex_init(&ret->kp_interlock, MUTEX_DEFAULT, IPL_NONE);
+  cv_init(&ret->kp_cv, "kport");
   
+  mutex_enter(&kport_mutex);
+  if (nports >= port_max) {
+    mutex_exit(&kport_mutex);
+    kmem_free(ret->kp_name, ret->kp_namelen);
+    kmem_free(ret, sizeof(*ret));
+    return ENFILE;
+  }
+  nports++;
+  while (kport_lookup_byid(port_next_id) != NULL) {
+    port_next_id++;
+  }
+  ret->kp_id = port_next_id;
+  LIST_INSERT_HEAD(&kport_head, ret, kport);
+  mutex_exit(&kport_mutex);
+  
+  *kpret = ret;
+  return 0;
 }
