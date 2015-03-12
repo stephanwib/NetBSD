@@ -43,6 +43,7 @@ static const size_t PORT_BUFFER_GROW_RATE = PORT_INITIAL_BUF_SIZE;
 #define PORT_MAX 4096
 #define PORT_MAX_QUEUE_LENGTH 4096
 #define PORT_MAX_MESSAGE_SIZE (256 * 1024)
+#define PORT_MAX_NAME_LENGTH 32
 
 static uint32_t port_max = PORT_MAX;
 static uint32_t nports = 0;
@@ -62,6 +63,7 @@ struct kport {
   port_id kp_id;  /* id of this port */
   pid_t kp_owner; /* owner PID assigned to this port */
   char *kp_name;  /* name of this port */
+  size_t kp_namelen; /* length of portname */
   uint32_t kp_nmsg;  /* number of messages */
   uid_t kp_uid; /* creator uid */
   gid_t kp_gid; /* creator gid */
@@ -111,4 +113,25 @@ kport_lookup_byname(const char *name)
     }
   }
   return NULL;
+}
+
+static int
+kport_create(struct lwp *l, const char *name, struct kport **kpret)
+{
+  struct kport *ret;
+  kauth_cred_t uc;
+  size_t namelen;
+  
+  uc = l->l_cred;
+  ret = kmem_zalloc(sizeof(*ret), KM_SLEEP);
+  
+  namelen = strlen(name);
+  if (namelen >= PORT_MAX_NAME_LENGTH) {
+    kmem_free(ret, sizeof(*ret));
+    return ENAMETOOLONG;
+  }
+  ret->kp_namelen = namelen + 1;
+  ret->kp_name = kmem_alloc(ret->ks_namelen, KM_SLEEP);
+  strlcpy(ret->kp_name, name, namelen + 1);
+  
 }
