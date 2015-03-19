@@ -29,16 +29,18 @@
 
 
 #include <sys/types.h>
+#include <sys/kmem.h>
+#include <sys/port.h>
 #include <sys/queue.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
-#include <OS.h>
+#include <sys/kauth.h>
 
 
 static const size_t PORT_INITIAL_BUF_SIZE = 4 * 1024 * 1024;
 static const size_t PORT_TOTAL_SPACE_LIMIT = 64 * 1024 * 1024;
 static const size_t PORT_PROC_SPACE_LIMIT = 8 * 1024 * 1024;
-static const size_t PORT_BUFFER_GROW_RATE = PORT_INITIAL_BUF_SIZE;
+static const size_t PORT_BUFFER_GROW_RATE = 4 * 1024 * 1024;
 
 #define PORT_MAX 4096
 #define PORT_MAX_QUEUE_LENGTH 4096
@@ -82,7 +84,8 @@ struct kp_msg {
 LIST_HEAD(kport_list, kport);
 static struct kport_list kport_head = LIST_HEAD_INITIALIZER(&kport_head);
 
-void kport_init(void)
+void
+kport_init(void)
 {
   mutex_init(&kport_mutex, MUTEX_DEFAULT, IPL_NONE);
 }
@@ -131,7 +134,7 @@ kport_create(struct lwp *l, const char *name, struct kport **kpret)
     return ENAMETOOLONG;
   }
   ret->kp_namelen = namelen + 1;
-  ret->kp_name = kmem_alloc(ret->ks_namelen, KM_SLEEP);
+  ret->kp_name = kmem_alloc(ret->kp_namelen, KM_SLEEP);
   strlcpy(ret->kp_name, name, namelen + 1);
   ret->kp_uid = kauth_cred_geteuid(uc);
   ret->kp_gid = kauth_cred_getegid(uc);
@@ -153,7 +156,7 @@ kport_create(struct lwp *l, const char *name, struct kport **kpret)
     port_next_id++;
   }
   ret->kp_id = port_next_id;
-  LIST_INSERT_HEAD(&kport_head, ret, kport);
+  LIST_INSERT_HEAD(&kport_head, ret, kp_entry);
   mutex_exit(&kport_mutex);
   
   *kpret = ret;
