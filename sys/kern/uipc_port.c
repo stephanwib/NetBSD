@@ -35,6 +35,7 @@
 #include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/kauth.h>
+#include <sys/syscallargs.h>
 
 
 static const size_t PORT_INITIAL_BUF_SIZE = 4 * 1024 * 1024;
@@ -67,6 +68,7 @@ struct kport {
   char *kp_name;  /* name of this port */
   size_t kp_namelen; /* length of name */
   uint32_t kp_nmsg;  /* number of messages */
+  uint32_t kp_qlen;  /* queue length */
   uid_t kp_uid; /* creator uid */
   gid_t kp_gid; /* creator gid */
   int32_t kp_state; /* state of this port */
@@ -119,27 +121,37 @@ kport_lookup_byname(const char *name)
 }
 
 static int
-kport_create(struct lwp *l, const char *name, struct kport **kpret)
+kport_create(struct lwp *l, const int queue_length, const char *name)
 {
   struct kport *ret;
   kauth_cred_t uc;
+  int error;
   size_t namelen;
-  
+  char namebuf[PORT_MAX_NAME_LENGTH + 1];
+
+  error = copyinstr(name, namebuf, sizeof(namebuf), &namelen);
+  if (error)
+    return (error);
+ 
   uc = l->l_cred;
   ret = kmem_zalloc(sizeof(*ret), KM_SLEEP);
-  
-  namelen = strlen(name);
+
+  if (queue_length < 1 || queue_length > PORT_MAX_QUEUE_LENGTH ) {
+    kmem_free(ret, sizeof(*ret));
+    return EINVAL;
+  }
   if (namelen >= PORT_MAX_NAME_LENGTH) {
     kmem_free(ret, sizeof(*ret));
     return ENAMETOOLONG;
   }
   ret->kp_namelen = namelen + 1;
   ret->kp_name = kmem_alloc(ret->kp_namelen, KM_SLEEP);
-  strlcpy(ret->kp_name, name, namelen + 1);
+  strlcpy(ret->kp_name, namebuf, namelen + 1);
   ret->kp_uid = kauth_cred_geteuid(uc);
   ret->kp_gid = kauth_cred_getegid(uc);
   ret->kp_owner = l->l_proc->p_pid;
   ret->kp_nmsg = 0;
+  ret->kp_qlen = queue_length;
   ret->kp_state = kp_unused;
   mutex_init(&ret->kp_interlock, MUTEX_DEFAULT, IPL_NONE);
   cv_init(&ret->kp_cv, "kport");
@@ -151,6 +163,12 @@ kport_create(struct lwp *l, const char *name, struct kport **kpret)
     kmem_free(ret, sizeof(*ret));
     return ENFILE;
   }
+  if (kport_lookup_byname(namebuf)) {
+    mutex_exit(&kport_mutex);
+    kmem_free(ret->kp_name, ret->kp_namelen);
+    kmem_free(ret, sizeof(*ret));
+    return EEXIST;
+  }
   nports++;
   while (kport_lookup_byid(port_next_id) != NULL) {
     port_next_id++;
@@ -159,6 +177,15 @@ kport_create(struct lwp *l, const char *name, struct kport **kpret)
   LIST_INSERT_HEAD(&kport_head, ret, kp_entry);
   mutex_exit(&kport_mutex);
   
-  *kpret = ret;
   return 0;
+}
+
+int
+sys_create_port(struct lwp *l, const struct sys_create_port_args *uap, register_t *retval)
+{
+        /* {
+                syscallarg(int) queue_length;
+                syscallarg(const char *) name;
+           } */
+  return kport_create(l, SCARG(uap, queue_length), SCARG(uap, name));
 }
