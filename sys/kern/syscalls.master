@@ -948,3 +948,4 @@
 			    off_t len); }
 480	STD  RUMP	{ int|sys||fdiscard(int fd, int PAD, off_t pos, \
 			    off_t len); }
+481     STD             { int|sys||create_port(int queue_length, const char *name); }
