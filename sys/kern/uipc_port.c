@@ -131,7 +131,7 @@ kport_create(struct lwp *l, const int queue_length, const char *name)
 
   error = copyinstr(name, namebuf, sizeof(namebuf), &namelen);
   if (error)
-    return (error);
+    return error;
  
   uc = l->l_cred;
   ret = kmem_zalloc(sizeof(*ret), KM_SLEEP);
@@ -177,7 +177,7 @@ kport_create(struct lwp *l, const int queue_length, const char *name)
   LIST_INSERT_HEAD(&kport_head, ret, kp_entry);
   mutex_exit(&kport_mutex);
   
-  return 0;
+  return ret->kp_id;
 }
 
 int
