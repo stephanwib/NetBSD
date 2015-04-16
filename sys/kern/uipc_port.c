@@ -121,7 +121,7 @@ kport_lookup_byname(const char *name)
 }
 
 static int
-kport_create(struct lwp *l, const int queue_length, const char *name)
+kport_create(struct lwp *l, const int queue_length, const char *name, port_id *val)
 {
   struct kport *ret;
   kauth_cred_t uc;
@@ -177,7 +177,8 @@ kport_create(struct lwp *l, const int queue_length, const char *name)
   LIST_INSERT_HEAD(&kport_head, ret, kp_entry);
   mutex_exit(&kport_mutex);
   
-  return ret->kp_id;
+  *val = ret->kp_id;
+  return 0;
 }
 
 int
@@ -187,5 +188,12 @@ sys_create_port(struct lwp *l, const struct sys_create_port_args *uap, register_
                 syscallarg(int) queue_length;
                 syscallarg(const char *) name;
            } */
-  return kport_create(l, SCARG(uap, queue_length), SCARG(uap, name));
+  port_id port;
+  int error;
+
+  error = kport_create(l, SCARG(uap, queue_length), SCARG(uap, name), &port);
+  if (error == 0)
+          *retval = port;
+
+  return error;
 }
