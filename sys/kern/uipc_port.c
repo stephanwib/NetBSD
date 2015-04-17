@@ -61,6 +61,7 @@ enum kp_state {
 
 struct kport {
   LIST_ENTRY(kport) kp_entry; /* global list entry */
+  SIMPLEQ_HEAD(, kp_msg) kp_msgq; /* head of message queue */
   kmutex_t kp_interlock;  /* lock on this kport */
   kcondvar_t  kp_cv;  /* condition variable */
   port_id kp_id;  /* id of this port */
@@ -75,6 +76,7 @@ struct kport {
 };
 
 struct kp_msg {
+  SIMPLEQ_ENTRY(kp_msg) kp_msg_next; /* message queue entry */
   int32_t kp_msg_code; /* message code */
   size_t kp_msg_size; /* bytes in message */
   uid_t kp_msg_sender_uid; /* uid of sender */
@@ -153,6 +155,7 @@ kport_create(struct lwp *l, const int queue_length, const char *name, port_id *v
   ret->kp_nmsg = 0;
   ret->kp_qlen = queue_length;
   ret->kp_state = kp_unused;
+  SIMPLEQ_INIT(&ret->kp_msgq);
   mutex_init(&ret->kp_interlock, MUTEX_DEFAULT, IPL_NONE);
   cv_init(&ret->kp_cv, "kport");
   
