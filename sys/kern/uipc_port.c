@@ -188,6 +188,10 @@ static int
 kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
 {
   struct kport *port;
+  struct kp_msg *msg;
+  kauth_cred_t uc;
+  
+  uc = l->l_cred;
   
   mutex_enter(&kport_mutex);
   port = kport_lookup_byid(id);
@@ -206,8 +210,19 @@ kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
     mutex_exit(&port->kp_interlock);
     return EMSGSIZE;
   }
-  
+  if (port->nmsg == port->kp_qlen) {
+    mutex_exit(&port->kp_interlock);
+    return EAGAIN;
+  }
   port->kp_state = kp_active;
+
+  msg = kmem_zalloc(sizeof(*msg), KM_SLEEP);
+  msg->kp_msg_code = code;
+  msg->kp_msg_size = size;
+  msg->kp_msg_sender_uid = kauth_cred_geteuid(uc);
+  msg->kp_msg_sender_gid = kauth_cred_getegid(uc);
+  msg->kp_msg_sender_pid = l->l_proc->p_pid;
+  msg->kp_msg_buffer = kmem_alloc(size, KM_SLEEP);
 }
 
 int
