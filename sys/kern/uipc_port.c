@@ -190,6 +190,7 @@ kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
   struct kport *port;
   struct kp_msg *msg;
   kauth_cred_t uc;
+  int error;
   
   uc = l->l_cred;
   
@@ -210,7 +211,7 @@ kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
     mutex_exit(&port->kp_interlock);
     return EMSGSIZE;
   }
-  if (port->nmsg == port->kp_qlen) {
+  if (port->kp_nmsg == port->kp_qlen) {
     mutex_exit(&port->kp_interlock);
     return EAGAIN;
   }
@@ -223,6 +224,20 @@ kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
   msg->kp_msg_sender_gid = kauth_cred_getegid(uc);
   msg->kp_msg_sender_pid = l->l_proc->p_pid;
   msg->kp_msg_buffer = kmem_alloc(size, KM_SLEEP);
+  
+  error = copyin(data, msg->kp_msg_buffer, size);
+  if (error) {
+    mutex_exit(&port->kp_interlock);
+    kmem_free(msg->kp_msg_buffer, size);
+    kmem_free(msg, sizeof(*msg));
+    return error;
+  }
+  
+  SIMPLEQ_INSERT_TAIL(&port->kp_msgq, msg, kp_msg_next);
+  port->kp_nmsg++;
+  cv_signal(&port->kp_cv);
+  mutex_exit(&port->kp_interlock);
+  return 0;
 }
 
 int
