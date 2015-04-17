@@ -184,6 +184,32 @@ kport_create(struct lwp *l, const int queue_length, const char *name, port_id *v
   return 0;
 }
 
+static int
+kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
+{
+  struct kport *port;
+  
+  mutex_enter(&kport_mutex);
+  port = kport_lookup_byid(id);
+  if (port == NULL) {
+    mutex_exit(&kport_mutex);
+    return ENOENT;
+  }
+  mutex_enter(&port->kp_interlock);
+  mutex_exit(&kport_mutex);
+  
+  if (port->kp_state == kp_deleted) {
+    mutex_exit(&port->kp_interlock);
+    return ENOENT;
+  }
+  if (size > PORT_MAX_MESSAGE_SIZE) {
+    mutex_exit(&port->kp_interlock);
+    return EMSGSIZE;
+  }
+  
+  port->kp_state = kp_active;
+}
+
 int
 sys_create_port(struct lwp *l, const struct sys_create_port_args *uap, register_t *retval)
 {
