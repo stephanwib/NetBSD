@@ -85,6 +85,9 @@ struct kp_msg {
   char *kp_msg_buffer; /* message data */
 };
 
+/* XXX: Only one list for the moment. To prevent contention around kport_mutex, an array of lists/locks is to be added
+ * along with a suitable distribution algorithm. */
+
 LIST_HEAD(kport_list, kport);
 static struct kport_list kport_head = LIST_HEAD_INITIALIZER(&kport_head);
 
