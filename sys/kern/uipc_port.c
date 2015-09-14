@@ -63,7 +63,8 @@ struct kport {
   LIST_ENTRY(kport) kp_entry; /* global list entry */
   SIMPLEQ_HEAD(, kp_msg) kp_msgq; /* head of message queue */
   kmutex_t kp_interlock;  /* lock on this kport */
-  kcondvar_t  kp_cv;  /* condition variable */
+  kcondvar_t  kp_rdcv;  /* reader CV */
+  kcondvar_t  kp_wrcv;  /* writer CV */
   port_id kp_id;  /* id of this port */
   pid_t kp_owner; /* owner PID assigned to this port */
   char *kp_name;  /* name of this port */
@@ -160,7 +161,8 @@ kport_create(struct lwp *l, const int queue_length, const char *name, port_id *v
   ret->kp_state = kp_unused;
   SIMPLEQ_INIT(&ret->kp_msgq);
   mutex_init(&ret->kp_interlock, MUTEX_DEFAULT, IPL_NONE);
-  cv_init(&ret->kp_cv, "kport");
+  cv_init(&ret->kp_rdcv, "port_read");
+  cv_init(&ret->kp_wrcv, "port_write");
   
   mutex_enter(&kport_mutex);
   if (nports >= port_max) {
@@ -188,7 +190,7 @@ kport_create(struct lwp *l, const int queue_length, const char *name, port_id *v
 }
 
 static int
-kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
+kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size, uint32_t flags, int timeout)
 {
   struct kport *port;
   struct kp_msg *msg;
@@ -215,8 +217,13 @@ kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
     return EMSGSIZE;
   }
   if (port->kp_nmsg == port->kp_qlen) {
-    mutex_exit(&port->kp_interlock);
-    return EAGAIN;
+    if (!timeout) {
+      mutex_exit(&port->kp_interlock);
+      return EAGAIN;
+    }
+    else {
+      cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+    }
   }
   port->kp_state = kp_active;
 
@@ -238,7 +245,7 @@ kport_write(struct lwp *l, port_id id, int32_t code, void *data, size_t size)
   
   SIMPLEQ_INSERT_TAIL(&port->kp_msgq, msg, kp_msg_next);
   port->kp_nmsg++;
-  cv_signal(&port->kp_cv);
+  cv_signal(&port->kp_rdcv);
   mutex_exit(&port->kp_interlock);
   return 0;
 }
