@@ -106,6 +106,7 @@ kport_lookup_byid(port_id id)
   KASSERT(mutex_owned(&kport_mutex));
   LIST_FOREACH(kp, &kport_head, kp_entry) {
     if (kp->kp_id == id) {
+      mutex_enter(&kp->kp_interlock);
       return kp;
     }
   }
@@ -120,6 +121,7 @@ kport_lookup_byname(const char *name)
   KASSERT(mutex_owned(&kport_mutex));
   LIST_FOREACH(kp, &kport_head, kp_entry) {
     if (strcmp(kp->kp_name, name) == 0) {
+      mutex_enter(&kp->kp_interlock);
       return kp;
     }
   }
@@ -205,7 +207,7 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
     mutex_exit(&kport_mutex);
     return ENOENT;
   }
-  mutex_enter(&port->kp_interlock);
+  
   mutex_exit(&kport_mutex);
   
   if (port->kp_state == kp_deleted) {
@@ -223,6 +225,13 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
     }
     else {
       cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      /* Interlock has been relinquished, so reacquire it. */
+      mutex_enter(&kport_mutex);
+      port = kport_lookup_byid(id);
+      mutex_exit(&kport_mutex);
+      if (port == NULL) {
+        return ENOENT;
+      }
     }
   }
   port->kp_state = kp_active;
