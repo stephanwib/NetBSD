@@ -224,14 +224,7 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
       return EAGAIN;
     }
     else {
-      cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
-      /* Interlock has been relinquished, so reacquire it. */
-      mutex_enter(&kport_mutex);
-      port = kport_lookup_byid(id);
-      mutex_exit(&kport_mutex);
-      if (port == NULL) {
-        return ENOENT;
-      }
+      cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
     }
   }
   port->kp_state = kp_active;
@@ -254,7 +247,7 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
   
   SIMPLEQ_INSERT_TAIL(&port->kp_msgq, msg, kp_msg_next);
   port->kp_nmsg++;
-  cv_signal(&port->kp_rdcv);
+  cv_signal(&port->kp_wrcv);
   mutex_exit(&port->kp_interlock);
   return 0;
 }
