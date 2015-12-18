@@ -207,14 +207,12 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
     mutex_exit(&kport_mutex);
     return ENOENT;
   }
-  
   mutex_exit(&kport_mutex);
   
   if (timeout && (flags < 0)) {
     mutex_exit(&port->kp_interlock);
     return EINVAL;
   }
-  
   if (port->kp_state == kp_deleted) {
     mutex_exit(&port->kp_interlock);
     return ENOENT;
@@ -262,7 +260,7 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
 }
 
 static int
-kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size, uint32_t flags, int timeout)
+kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size, uint32_t flags, int timeout, int *bytes_read)
 {
   struct kport *port;
   struct kp_msg *msg;
@@ -278,14 +276,12 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
     mutex_exit(&kport_mutex);
     return ENOENT;
   }
-  
   mutex_exit(&kport_mutex);
   
   if (timeout && (flags < 0)) {
     mutex_exit(&port->kp_interlock);
     return EINVAL;
   }
-  
   if (port->kp_state == kp_deleted) {
     mutex_exit(&port->kp_interlock);
     return ENOENT;
@@ -306,7 +302,6 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   }
   
   msg = SIMPLEQ_FIRST(&port->kp_msgq);
-  SIMPLEQ_REMOVE_HEAD(&port->kp_msgq, kp_msg_next);
   
   if (msg->size > size) {
     copyout_size = size;
@@ -316,8 +311,18 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   }
   
   *code = msg->kp_msg_code;
+  error = copyout(msg->kp_msg_buffer, data, copyout_size);
+  if (error) {
+    mutex_exit(&port->kp_interlock);
+    return (error);
+  }
   
-  
+  SIMPLEQ_REMOVE_HEAD(&port->kp_msgq, kp_msg_next);
+  port->kp_nmsg--;
+  cv_signal(&port->kp_rdcv);
+  mutex_exit(&port->kp_interlock);
+  *bytes_read = copyout_size;
+  return 0;
 }
 
 int
