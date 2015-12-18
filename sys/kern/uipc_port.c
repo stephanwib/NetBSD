@@ -224,7 +224,11 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
       return EAGAIN;
     }
     else {
-      cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      if (error == EWOULDBLOCK) {
+        mutex_exit(&port->kp_interlock);
+        return ETIMEDOUT;
+      }
     }
   }
   port->kp_state = kp_active;
@@ -282,7 +286,11 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
       return EAGAIN;
     }
     else {
-      cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      if (error == EWOULDBLOCK) {
+        mutex_exit(&port->kp_interlock);
+        return ETIMEDOUT;
+      }
     }
   }
   
