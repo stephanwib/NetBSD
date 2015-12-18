@@ -268,3 +268,39 @@ sys_create_port(struct lwp *l, const struct sys_create_port_args *uap, register_
 
   return error;
 }
+
+int
+write_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval)
+{
+        /* {
+                syscallarg(int) port_id;
+                syscallarg(int) msg_code;
+                syscallarg(void*) msg_buffer;
+                syscallarg(int) buffer_size;
+           } */
+  int error;
+  
+  error = kport_write_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), 0, 0);
+  *retval = error;
+  
+  return 0;
+}
+
+int write_port_etc(struct lwp *l, const struct sys_write_port_etc_args *uap, register_t *retval)
+{
+        /* {
+                syscallarg(int) port_id;
+                syscallarg(int) msg_code;
+                syscallarg(void*) msg_buffer;
+                syscallarg(int) buffer_size;
+                syscallarg(uint32_t) flags;
+                syscallarg(int) timeout;
+           } */
+    int error;
+  
+  error = kport_write_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), SCARG(uap, flags), SCARG(uap, timeout));
+  *retval = error;
+  
+  return 0;
+}
+
