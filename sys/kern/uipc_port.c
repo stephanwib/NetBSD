@@ -210,6 +210,11 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
   
   mutex_exit(&kport_mutex);
   
+  if (timeout && (flags < 0)) {
+    mutex_exit(&port->kp_interlock);
+    return EINVAL;
+  }
+  
   if (port->kp_state == kp_deleted) {
     mutex_exit(&port->kp_interlock);
     return ENOENT;
@@ -224,7 +229,7 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
       return EAGAIN;
     }
     else {
-      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(flags) / 1000)); /* XXX: microseconds? */
       if (error == EWOULDBLOCK) {
         mutex_exit(&port->kp_interlock);
         return ETIMEDOUT;
@@ -263,6 +268,7 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   struct kp_msg *msg;
   kauth_cred_t uc;
   int error;
+  int copyout_size;
   
   uc = l->l_cred;
   
@@ -275,6 +281,11 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   
   mutex_exit(&kport_mutex);
   
+  if (timeout && (flags < 0)) {
+    mutex_exit(&port->kp_interlock);
+    return EINVAL;
+  }
+  
   if (port->kp_state == kp_deleted) {
     mutex_exit(&port->kp_interlock);
     return ENOENT;
@@ -286,13 +297,26 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
       return EAGAIN;
     }
     else {
-      error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(flags) / 1000)); /* XXX: microseconds? */
       if (error == EWOULDBLOCK) {
         mutex_exit(&port->kp_interlock);
         return ETIMEDOUT;
       }
     }
   }
+  
+  msg = SIMPLEQ_FIRST(&port->kp_msgq);
+  SIMPLEQ_REMOVE_HEAD(&port->kp_msgq, kp_msg_next);
+  
+  if (msg->size > size) {
+    copyout_size = size;
+  }
+  else {
+    copyout_size = msg_size;
+  }
+  
+  *code = msg->kp_msg_code;
+  
   
 }
 
