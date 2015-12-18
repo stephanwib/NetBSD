@@ -252,6 +252,42 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
   return 0;
 }
 
+static int
+kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size, uint32_t flags, int timeout)
+{
+  struct kport *port;
+  struct kp_msg *msg;
+  kauth_cred_t uc;
+  int error;
+  
+  uc = l->l_cred;
+  
+  mutex_enter(&kport_mutex);
+  port = kport_lookup_byid(id);
+  if (port == NULL) {
+    mutex_exit(&kport_mutex);
+    return ENOENT;
+  }
+  
+  mutex_exit(&kport_mutex);
+  
+  if (port->kp_state == kp_deleted) {
+    mutex_exit(&port->kp_interlock);
+    return ENOENT;
+  }
+  
+  if (port->kp_nmsg == 0) {
+    if (!timeout) {
+      mutex_exit(&port->kp_interlock);
+      return EAGAIN;
+    }
+    else {
+      cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+    }
+  }
+  
+}
+
 int
 sys_create_port(struct lwp *l, const struct sys_create_port_args *uap, register_t *retval)
 {
