@@ -318,6 +318,8 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   }
   
   SIMPLEQ_REMOVE_HEAD(&port->kp_msgq, kp_msg_next);
+  kmem_free(msg->kp_msg_buffer, msg->kp_msg_size);
+  kmem_free(msg, sizeof(*msg));
   port->kp_nmsg--;
   cv_signal(&port->kp_rdcv);
   mutex_exit(&port->kp_interlock);
