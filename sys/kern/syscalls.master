@@ -949,3 +949,6 @@
 480	STD  RUMP	{ int|sys||fdiscard(int fd, int PAD, off_t pos, \
 			    off_t len); }
 481     STD             { int|sys||create_port(int queue_length, const char *name); }
+482     STD             { int|sys||write_port(int port_id, int msg_code, void *msg_buffer, int buffer_size); }
+483     STD             { int|sys||write_port_etc(int port_id, int msg_code, void *msg_buffer, int buffer_size, \
+			    int timeout); }
