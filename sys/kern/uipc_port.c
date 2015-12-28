@@ -301,10 +301,6 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
       }
     }
   }
-  if (port->kp_state == kp_deleted) {
-    mutex_exit(&port->kp_interlock);
-    return ENOENT;
-  }
   
   msg = SIMPLEQ_FIRST(&port->kp_msgq);
   copyout_size = (msg->size > size) ? size : msg_size;
