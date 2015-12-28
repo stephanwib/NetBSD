@@ -213,10 +213,6 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
   }
   mutex_exit(&kport_mutex);
   
-  if (timeout && (flags < 0)) {
-    mutex_exit(&port->kp_interlock);
-    return EINVAL;
-  }
   if (port->kp_state == kp_deleted) {
     mutex_exit(&port->kp_interlock);
     return ENOENT;
@@ -238,7 +234,11 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
       }
     }
   }
-  port->kp_state = kp_active;
+  if (port->kp_state == kp_deleted) {
+    mutex_exit(&port->kp_interlock);
+    return ENOENT;
+  }
+  
 
   msg = kmem_zalloc(sizeof(*msg), KM_SLEEP);
   msg->kp_msg_code = code;
@@ -303,6 +303,10 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
         return ETIMEDOUT;
       }
     }
+  }
+  if (port->kp_state == kp_deleted) {
+    mutex_exit(&port->kp_interlock);
+    return ENOENT;
   }
   
   msg = SIMPLEQ_FIRST(&port->kp_msgq);
