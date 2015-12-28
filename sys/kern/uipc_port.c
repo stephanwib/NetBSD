@@ -53,6 +53,10 @@ static uint32_t nports = 0;
 static port_id port_next_id = 1;
 static kmutex_t kport_mutex;
 
+enum {
+  PORT_TIMEOUT;
+};
+
 enum kp_state {
   kp_unused = 0,
   kp_active,
@@ -222,12 +226,12 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
     return EMSGSIZE;
   }
   if (port->kp_nmsg == port->kp_qlen) {
-    if (!timeout) {
+    if (!(flags & PORT_TIMEOUT)) {
       mutex_exit(&port->kp_interlock);
       return EAGAIN;
     }
     else {
-      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(flags) / 1000)); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
       if (error == EWOULDBLOCK) {
         mutex_exit(&port->kp_interlock);
         return ETIMEDOUT;
@@ -288,12 +292,12 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   }
   
   if (port->kp_nmsg == 0) {
-    if (!timeout) {
+    if (!(flags & PORT_TIMEOUT)) {
       mutex_exit(&port->kp_interlock);
       return EAGAIN;
     }
     else {
-      error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(flags) / 1000)); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
       if (error == EWOULDBLOCK) {
         mutex_exit(&port->kp_interlock);
         return ETIMEDOUT;
