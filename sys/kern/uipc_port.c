@@ -228,18 +228,14 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
     }
     else {
       error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
-      if (error == EWOULDBLOCK) {
+      if (error || (port->kp_state == kp_deleted)) {
+        error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
         mutex_exit(&port->kp_interlock);
-        return ETIMEDOUT;
+        return error;
       }
     }
   }
-  if (port->kp_state == kp_deleted) {
-    mutex_exit(&port->kp_interlock);
-    return ENOENT;
-  }
   
-
   msg = kmem_zalloc(sizeof(*msg), KM_SLEEP);
   msg->kp_msg_code = code;
   msg->kp_msg_size = size;
@@ -298,9 +294,10 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
     }
     else {
       error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
-      if (error == EWOULDBLOCK) {
+      if (error || (port->kp_state == kp_deleted)) {
+        error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
         mutex_exit(&port->kp_interlock);
-        return ETIMEDOUT;
+        return error;
       }
     }
   }
@@ -364,9 +361,10 @@ write_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *ret
   int error;
   
   error = kport_write_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), 0, 0);
-  *retval = error;
+  if (error == 0)
+    *retval = error;
   
-  return 0;
+  return error;
 }
 
 int write_port_etc(struct lwp *l, const struct sys_write_port_etc_args *uap, register_t *retval)
@@ -382,9 +380,10 @@ int write_port_etc(struct lwp *l, const struct sys_write_port_etc_args *uap, reg
     int error;
   
   error = kport_write_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), SCARG(uap, flags), SCARG(uap, timeout));
-  *retval = error;
+  if (error == 0)
+    *retval = error;
   
-  return 0;
+  return error;
 }
 
 int
@@ -400,7 +399,7 @@ read_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retv
   int nread;
   
   error = kport_read_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), 0, 0, &nread);
-  if (!error)
+  if (error == 0)
     *retval = nread;
 
   return error;
@@ -421,7 +420,7 @@ read_port_etc(struct lwp *l, const struct sys_write_port_args *uap, register_t *
   int nread;
   
   error = kport_read_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), flags, timeout, &nread);
-  if (!error)
+  if (error == 0)
     *retval = nread;
 
   return error;
