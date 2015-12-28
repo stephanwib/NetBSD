@@ -307,14 +307,7 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   }
   
   msg = SIMPLEQ_FIRST(&port->kp_msgq);
-  
-  if (msg->size > size) {
-    copyout_size = size;
-  }
-  else {
-    copyout_size = msg_size;
-  }
-  
+  copyout_size = (msg->size > size) ? size : msg_size;
   *code = msg->kp_msg_code;
   error = copyout(msg->kp_msg_buffer, data, copyout_size);
   if (error) {
