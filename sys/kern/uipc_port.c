@@ -383,3 +383,42 @@ int write_port_etc(struct lwp *l, const struct sys_write_port_etc_args *uap, reg
   return 0;
 }
 
+int
+read_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval)
+{
+        /* {
+                syscallarg(int) port_id;
+                syscallarg(int*) msg_code;
+                syscallarg(void*) msg_buffer;
+                syscallarg(int) buffer_size;
+           } */
+  int error;
+  int nread;
+  
+  error = kport_read_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), 0, 0, &nread);
+  if (!error)
+    *retval = nread;
+
+  return error;
+}
+
+int
+read_port_etc(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval)
+{
+        /* {
+                syscallarg(int) port_id;
+                syscallarg(int*) msg_code;
+                syscallarg(void*) msg_buffer;
+                syscallarg(int) buffer_size;
+                syscallarg(uint32_t) flags;
+                syscallarg(int) timeout;
+           } */
+  int error;
+  int nread;
+  
+  error = kport_read_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), flags, timeout, &nread);
+  if (!error)
+    *retval = nread;
+
+  return error;
+}
