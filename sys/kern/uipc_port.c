@@ -495,7 +495,7 @@ int write_port_etc(struct lwp *l, const struct sys_write_port_etc_args *uap, reg
 }
 
 int
-read_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval)
+read_port(struct lwp *l, const struct sys_read_port_args *uap, register_t *retval)
 {
         /* {
                 syscallarg(int) port_id;
@@ -514,7 +514,7 @@ read_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retv
 }
 
 int
-read_port_etc(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval)
+read_port_etc(struct lwp *l, const struct sys_read_port_etc_args *uap, register_t *retval)
 {
         /* {
                 syscallarg(int) port_id;
@@ -535,7 +535,7 @@ read_port_etc(struct lwp *l, const struct sys_write_port_args *uap, register_t *
 }
 
 int
-close_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
+close_port(struct lwp *l, const struct sys_close_port_args *uap, register_t *retval) {
        /* {
                 syscallarg(int) port_id;
           } */
@@ -549,7 +549,7 @@ close_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *ret
 }
 
 int
-delete_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
+delete_port(struct lwp *l, const struct sys_delete_port_args *uap, register_t *retval) {
        /* {
                 syscallarg(int) port_id;
           } */
@@ -563,13 +563,25 @@ delete_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *re
 }
 
 int
-find_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
+find_port(struct lwp *l, const struct sys_find_port_args *uap, register_t *retval) {
        /* {
                syscallarg(const char *) port_name;
           } */
-int error;
-error = kport_find(SCARG(uap, port_name));
-if (error == 0)
-  *retval = error;
-return error;
+  int error, port_id;
+  error = kport_find(SCARG(uap, port_name), &port_id);
+  if (error == 0)
+    *retval = port_id;
+  return error;
+}
+
+int
+port_count(struct lwp *l, const struct sys_port_count_args *uap, register_t *retval) {
+       /* {
+               syscallarg(int) port_id;
+          } */
+  int error, count;
+  error = kport_count(SCARG(uap, port_id), &count);
+  if (error == 0)
+    *retval = count;
+  return error;
 }
