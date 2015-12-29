@@ -276,8 +276,28 @@ kport_find(const char *name, port_id *port_id)
   mutex_exit(&kport_mutex);
   
   error = (port == NULL) ? ENOENT : 0;
-  if (error == 0)
+  if (error == 0) {
     *port_id = port->kp_id;
+    mutex_exit(&port->kp_interlock);
+  }
+  return error;
+}
+
+static int
+kport_count(port_id id, int *count)
+{
+  struct kport *port;
+  int error;
+  
+  mutex_enter(&kport_mutex);
+  port = kport_lookup_byid(id);
+  mutex_exit(&kport_mutex);
+  
+  error = (port == NULL) ? ENOENT : 0;
+  if (error == 0) {
+    *count = port->kp_nmsg;
+    mutex_exit(&port->kp_interlock);
+  }
   return error;
 }
 
