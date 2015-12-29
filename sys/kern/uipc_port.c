@@ -73,11 +73,12 @@ struct kport {
   pid_t kp_owner; /* owner PID assigned to this port */
   char *kp_name;  /* name of this port */
   size_t kp_namelen; /* length of name */
-  uint32_t kp_nmsg;  /* number of messages */
-  uint32_t kp_qlen;  /* queue length */
+  int kp_state; /* state of this port */
+  int kp_nmsg;  /* number of messages */
+  int kp_qlen;  /* queue length */
+  int kp_waiters;  /* count of waiters */
   uid_t kp_uid; /* creator uid */
   gid_t kp_gid; /* creator gid */
-  int32_t kp_state; /* state of this port */
 };
 
 struct kp_msg {
@@ -162,9 +163,10 @@ kport_create(struct lwp *l, const int queue_length, const char *name, port_id *v
   ret->kp_uid = kauth_cred_geteuid(uc);
   ret->kp_gid = kauth_cred_getegid(uc);
   ret->kp_owner = l->l_proc->p_pid;
+  ret->kp_state = kp_active;
   ret->kp_nmsg = 0;
   ret->kp_qlen = queue_length;
-  ret->kp_state = kp_unused;
+  ret->kp_waiters = 0;
   SIMPLEQ_INIT(&ret->kp_msgq);
   mutex_init(&ret->kp_interlock, MUTEX_DEFAULT, IPL_NONE);
   cv_init(&ret->kp_rdcv, "port_read");
@@ -227,7 +229,9 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
       return EAGAIN;
     }
     else {
+      port->kp_waiters++;
       error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      port->kp_waiters--;
       if (error || (port->kp_state == kp_deleted)) {
         error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
         mutex_exit(&port->kp_interlock);
@@ -293,7 +297,9 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
       return EAGAIN;
     }
     else {
+      port->kp_waiters++;
       error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      port->kp_waiters--;
       if (error || (port->kp_state == kp_deleted)) {
         error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
         mutex_exit(&port->kp_interlock);
