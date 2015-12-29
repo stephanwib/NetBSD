@@ -255,7 +255,7 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
   struct kport *port;
   struct kp_msg *msg;
   kauth_cred_t uc;
-  int error;
+  int error, t;
   
   uc = l->l_cred;
   
@@ -276,13 +276,14 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
     return EMSGSIZE;
   }
   if (port->kp_nmsg == port->kp_qlen) {
-    if (!(flags & PORT_TIMEOUT)) {
+    if ((flags & PORT_TIMEOUT) && (timeout == 0)) {
       mutex_exit(&port->kp_interlock);
       return EAGAIN;
     }
     else {
+      t = (flags & PORT_TIMEOUT) ? mstohz(timeout / 1000) : 0;
       port->kp_waiters++;
-      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, t); /* XXX: microseconds? */
       port->kp_waiters--;
       if (error || (port->kp_state == kp_deleted) || (port->kp_state == kp_closed)) {
         error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
@@ -321,8 +322,7 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   struct kport *port;
   struct kp_msg *msg;
   kauth_cred_t uc;
-  int error;
-  int copyout_size;
+  int error, copyout_size, t;
   
   uc = l->l_cred;
   
@@ -344,13 +344,14 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   }
   
   if (port->kp_nmsg == 0) {
-    if (!(flags & PORT_TIMEOUT)) {
+    if ((flags & PORT_TIMEOUT) && (timeout == 0)) {
       mutex_exit(&port->kp_interlock);
       return EAGAIN;
     }
     else {
+      t = (flags & PORT_TIMEOUT) ? mstohz(timeout / 1000) : 0;
       port->kp_waiters++;
-      error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, t); /* XXX: microseconds? */
       port->kp_waiters--;
       if (error || (port->kp_state == kp_deleted)) {
         error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
