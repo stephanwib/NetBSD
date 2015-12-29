@@ -233,13 +233,20 @@ kport_delete_logical(port_id id)
   }
   mutex_exit(&kport_mutex);
   
-  port->kp_state = kp_deleted;
-  mutex_exit(&port->kp_interlock);
+  if (port->kp_waiters > 0) {
+    port->kp_state = kp_deleted;
+    mutex_exit(&port->kp_interlock);
+  }
+  else {
+    kport_delete_physical(port);
+  }
   return 0;
 }
 
 static int
 kport_delete_physical(struct kport *port) {
+  KASSERT(mutex_owned(&port->kp_interlock));
+  
   cv_destroy(&port->kp_rdcv);
   cv_destroy(&port->kp_wrcv);
   mutex_exit(&port->kp_interlock);
