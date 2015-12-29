@@ -259,10 +259,11 @@ kport_delete_physical(struct kport *port) {
 }
 
 static int
-kport_find(const char *name)
+kport_find(const char *name, port_id *port_id)
 {
   struct kport *port;
   char namebuf[PORT_MAX_NAME_LENGTH + 1];
+  int error;
 
   error = copyinstr(name, namebuf, sizeof(namebuf), &namelen);
   if (error)
@@ -274,7 +275,9 @@ kport_find(const char *name)
   port = kport_lookup_byname(namebuf);
   mutex_exit(&kport_mutex);
   
-  error = (port == NULL) ? ENOENT : port->kp_id;
+  error = (port == NULL) ? ENOENT : 0;
+  if (error == 0)
+    *port_id = port->kp_id;
   return error;
 }
 
