@@ -58,7 +58,7 @@ enum {
 };
 
 enum kp_state {
-  kp_unused = 0,
+  kp_closed = 0,
   kp_active,
   kp_deleted
 };
@@ -215,7 +215,7 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
   }
   mutex_exit(&kport_mutex);
   
-  if (port->kp_state == kp_deleted) {
+  if ((port->kp_state == kp_deleted) || (port->kp_state == kp_closed)) {
     mutex_exit(&port->kp_interlock);
     return ENOENT;
   }
@@ -232,7 +232,7 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
       port->kp_waiters++;
       error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, (mstohz(timeout) / 1000)); /* XXX: microseconds? */
       port->kp_waiters--;
-      if (error || (port->kp_state == kp_deleted)) {
+      if (error || (port->kp_state == kp_deleted) || (port->kp_state == kp_closed)) {
         error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
         mutex_exit(&port->kp_interlock);
         return error;
