@@ -490,3 +490,29 @@ read_port_etc(struct lwp *l, const struct sys_write_port_args *uap, register_t *
 
   return error;
 }
+
+int close_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
+       /* {
+                syscallarg(int) port_id;
+          } */
+  int error;
+  
+  error = kport_close(SCARG(uap, port_id));
+  if (error == 0)
+    *retval = error;
+    
+  return error;  
+}
+
+int delete_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
+       /* {
+                syscallarg(int) port_id;
+          } */
+  int error;
+  
+  error = kport_delete_logical(SCARG(uap, port_id));
+  if (error == 0)
+    *retval = error;
+    
+  return error;  
+}
