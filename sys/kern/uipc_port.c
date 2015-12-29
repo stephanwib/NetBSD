@@ -514,7 +514,8 @@ read_port_etc(struct lwp *l, const struct sys_write_port_args *uap, register_t *
   return error;
 }
 
-int close_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
+int
+close_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
        /* {
                 syscallarg(int) port_id;
           } */
@@ -527,7 +528,8 @@ int close_port(struct lwp *l, const struct sys_write_port_args *uap, register_t 
   return error;  
 }
 
-int delete_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
+int
+delete_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
        /* {
                 syscallarg(int) port_id;
           } */
@@ -538,4 +540,16 @@ int delete_port(struct lwp *l, const struct sys_write_port_args *uap, register_t
     *retval = error;
     
   return error;  
+}
+
+int
+find_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval) {
+       /* {
+               syscallarg(const char *) port_name;
+          } */
+int error;
+error = kport_find(SCARG(uap, port_name));
+if (error == 0)
+  *retval = error;
+return error;
 }
