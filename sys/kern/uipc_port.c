@@ -198,6 +198,45 @@ kport_create(struct lwp *l, const int queue_length, const char *name, port_id *v
 }
 
 static int
+kport_close(port_id id)
+{
+  struct kport *port;
+  
+  mutex_enter(&kport_mutex);
+  port = kport_lookup_byid(id);
+  if (port == NULL) {
+    mutex_exit(&kport_mutex);
+    return ENOENT;
+  }
+  mutex_exit(&kport_mutex);
+  
+  port->kp_state = kp_closed;
+  mutex_exit(&port->kp_interlock);
+}
+
+static int
+kport_delete_logical(port_id id)
+{
+  struct kport *port;
+  
+  mutex_enter(&kport_mutex);
+  port = kport_lookup_byid(id);
+  if (port == NULL) {
+    mutex_exit(&kport_mutex);
+    return ENOENT;
+  }
+  LIST_FOREACH(kp, &kport_head, kp_entry) {
+    if (kp->kp_id == id) {
+      LIST_REMOVE(kp, kp_entry);
+    }
+  }
+  mutex_exit(&kport_mutex);
+  
+  port->kp_state = kp_deleted;
+  mutex_exit(&port->kp_interlock);
+}
+
+static int
 kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size, uint32_t flags, int timeout)
 {
   struct kport *port;
