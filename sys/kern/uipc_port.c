@@ -281,10 +281,14 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
       return EAGAIN;
     }
     else {
-      t = (flags & PORT_TIMEOUT) ? mstohz(timeout / 1000) : 0;
+      t = (flags & PORT_TIMEOUT) ? mstohz(timeout / 1000) : 0; /* XXX: ==> ts2timo()? */
       port->kp_waiters++;
-      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, t); /* XXX: microseconds? */
+      error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, t); 
       port->kp_waiters--;
+      if ((port->kp_state == kp_deleted) && (port->waiters == 0)) { /* port has been logically destroyed, and we are the last waiter */
+        kport_delete_physical(port);
+        return ENOENT;
+      }
       if (error || (port->kp_state == kp_deleted) || (port->kp_state == kp_closed)) {
         error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
         mutex_exit(&port->kp_interlock);
@@ -353,6 +357,10 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
       port->kp_waiters++;
       error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, t); /* XXX: microseconds? */
       port->kp_waiters--;
+      if ((port->kp_state == kp_deleted) && (port->waiters == 0)) { /* port has been logically destroyed, and we are the last waiter */
+        kport_delete_physical(port);
+        return ENOENT;
+      }
       if (error || (port->kp_state == kp_deleted)) {
         error = (error == EWOULDBLOCK) ? ETIMEDOUT : ENOENT;
         mutex_exit(&port->kp_interlock);
