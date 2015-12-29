@@ -212,6 +212,7 @@ kport_close(port_id id)
   
   port->kp_state = kp_closed;
   mutex_exit(&port->kp_interlock);
+  return 0;
 }
 
 static int
@@ -234,6 +235,18 @@ kport_delete_logical(port_id id)
   
   port->kp_state = kp_deleted;
   mutex_exit(&port->kp_interlock);
+  return 0;
+}
+
+static int
+kport_delete_physical(struct kport *port) {
+  cv_destroy(&port->kp_rdcv);
+  cv_destroy(&port->kp_wrcv);
+  mutex_exit(&port->kp_interlock);
+  mutex_destroy(&port->kp_interlock);
+  kmem_free(port->kp_name, ret->kp_namelen);
+  kmem_free(port, sizeof(*port));
+  return 0;
 }
 
 static int
