@@ -235,6 +235,8 @@ kport_delete_logical(port_id id)
   
   if (port->kp_waiters > 0) {
     port->kp_state = kp_deleted;
+    cv_broadcast(&port->kp_rdcv);
+    cv_broadcast(&port->kp_wrcv);
     mutex_exit(&port->kp_interlock);
   }
   else {
