@@ -958,3 +958,4 @@
 486     STD             { int|sys||close_port(int port_id); }
 487     STD             { int|sys||delete_port(int port_id); }
 488     STD             { int|sys||find_port(const char *port_name); }
+489     STD             { int|sys||port_count(int port_id); }
