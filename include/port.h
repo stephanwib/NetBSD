@@ -40,5 +40,6 @@ size_t          read_port(port_id, int*, void*, int);
 size_t          read_port_etc(port_id, int*, void*, int, uint32_t, int);
 size_t          write_port(port_id, int, void*, int);
 size_t          write_port_etc(port_id, int, void*, int, uint32_t, int);
+int             port_count(port_id);
 ~
 ~
