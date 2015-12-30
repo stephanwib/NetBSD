@@ -27,6 +27,61 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+
+#ifndef _SYS_PORT_H
+#define _SYS_PORT_H
+
 typedef u_int port_id;
 
+
+#ifdef _KERNEL
+
+#include <sys/queue.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
+
+enum {
+  PORT_TIMEOUT
+};
+
+enum kp_state {
+  kp_closed = 0,
+  kp_active,
+  kp_deleted
+};
+
+struct kport {
+  LIST_ENTRY(kport) kp_entry; /* global list entry */
+  SIMPLEQ_HEAD(, kp_msg) kp_msgq; /* head of message queue */
+  kmutex_t kp_interlock;  /* lock on this kport */
+  kcondvar_t  kp_rdcv;  /* reader CV */
+  kcondvar_t  kp_wrcv;  /* writer CV */
+  port_id kp_id;  /* id of this port */
+  pid_t kp_owner; /* owner PID assigned to this port */
+  char *kp_name;  /* name of this port */
+  size_t kp_namelen; /* length of name */
+  int kp_state; /* state of this port */
+  int kp_nmsg;  /* number of messages */
+  int kp_qlen;  /* queue length */
+  int kp_waiters;  /* count of waiters */
+  uid_t kp_uid; /* creator uid */
+  gid_t kp_gid; /* creator gid */
+};
+
+struct kp_msg {
+  SIMPLEQ_ENTRY(kp_msg) kp_msg_next; /* message queue entry */
+  int32_t kp_msg_code; /* message code */
+  size_t kp_msg_size; /* bytes in message */
+  uid_t kp_msg_sender_uid; /* uid of sender */
+  gid_t kp_msg_sender_gid; /* gid of sender */
+  pid_t kp_msg_sender_pid; /* pid of sender */
+  char *kp_msg_buffer; /* message data */
+};
+
+
+/* Prototypes */
 void kport_init(void);
+
+#endif	/* _KERNEL */
+
+#endif	/* _SYS_PORT_H_ */
