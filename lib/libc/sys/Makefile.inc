@@ -92,6 +92,8 @@ ASM=	access.S acct.S \
 	bind.S \
 	chdir.S chflags.S chmod.S chown.S chroot.S clock_nanosleep.S \
 		__clock_getres50.S __clock_gettime50.S \
+	create_port.S write_port.S write_port_etc.S read_port.S \
+		read_port_etc.S close_port.S delete_port.S find_port.S port_count.S \
 	dup.S dup2.S dup3.S \
 	extattrctl.S \
 		extattr_delete_fd.S extattr_delete_file.S \
