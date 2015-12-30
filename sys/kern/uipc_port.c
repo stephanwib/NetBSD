@@ -27,12 +27,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/kmem.h>
 #include <sys/port.h>
-#include <sys/queue.h>
-#include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/kauth.h>
 #include <sys/syscallargs.h>
@@ -53,43 +51,6 @@ static uint32_t nports = 0;
 static port_id port_next_id = 1;
 static kmutex_t kport_mutex;
 
-enum {
-  PORT_TIMEOUT;
-};
-
-enum kp_state {
-  kp_closed = 0,
-  kp_active,
-  kp_deleted
-};
-
-struct kport {
-  LIST_ENTRY(kport) kp_entry; /* global list entry */
-  SIMPLEQ_HEAD(, kp_msg) kp_msgq; /* head of message queue */
-  kmutex_t kp_interlock;  /* lock on this kport */
-  kcondvar_t  kp_rdcv;  /* reader CV */
-  kcondvar_t  kp_wrcv;  /* writer CV */
-  port_id kp_id;  /* id of this port */
-  pid_t kp_owner; /* owner PID assigned to this port */
-  char *kp_name;  /* name of this port */
-  size_t kp_namelen; /* length of name */
-  int kp_state; /* state of this port */
-  int kp_nmsg;  /* number of messages */
-  int kp_qlen;  /* queue length */
-  int kp_waiters;  /* count of waiters */
-  uid_t kp_uid; /* creator uid */
-  gid_t kp_gid; /* creator gid */
-};
-
-struct kp_msg {
-  SIMPLEQ_ENTRY(kp_msg) kp_msg_next; /* message queue entry */
-  int32_t kp_msg_code; /* message code */
-  size_t kp_msg_size; /* bytes in message */
-  uid_t kp_msg_sender_uid; /* uid of sender */
-  gid_t kp_msg_sender_gid; /* gid of sender */
-  pid_t kp_msg_sender_pid; /* pid of sender */
-  char *kp_msg_buffer; /* message data */
-};
 
 /* XXX: Only one list for the moment. To prevent contention around kport_mutex, an array of lists/locks is to be added
  * along with a suitable distribution algorithm. */
@@ -216,9 +177,23 @@ kport_close(port_id id)
 }
 
 static int
+kport_delete_physical(struct kport *port) {
+  KASSERT(mutex_owned(&port->kp_interlock));
+
+  cv_destroy(&port->kp_rdcv);
+  cv_destroy(&port->kp_wrcv);
+  mutex_exit(&port->kp_interlock);
+  mutex_destroy(&port->kp_interlock);
+  kmem_free(port->kp_name, port->kp_namelen);
+  kmem_free(port, sizeof(*port));
+  return 0;
+}
+
+
+static int
 kport_delete_logical(port_id id)
 {
-  struct kport *port;
+  struct kport *port, *kp;
   
   mutex_enter(&kport_mutex);
   port = kport_lookup_byid(id);
@@ -245,24 +220,13 @@ kport_delete_logical(port_id id)
   return 0;
 }
 
-static int
-kport_delete_physical(struct kport *port) {
-  KASSERT(mutex_owned(&port->kp_interlock));
-  
-  cv_destroy(&port->kp_rdcv);
-  cv_destroy(&port->kp_wrcv);
-  mutex_exit(&port->kp_interlock);
-  mutex_destroy(&port->kp_interlock);
-  kmem_free(port->kp_name, ret->kp_namelen);
-  kmem_free(port, sizeof(*port));
-  return 0;
-}
 
 static int
-kport_find(const char *name, port_id *port_id)
+kport_find(const char *name, port_id *id)
 {
   struct kport *port;
   char namebuf[PORT_MAX_NAME_LENGTH + 1];
+  size_t namelen;
   int error;
 
   error = copyinstr(name, namebuf, sizeof(namebuf), &namelen);
@@ -277,7 +241,7 @@ kport_find(const char *name, port_id *port_id)
   
   error = (port == NULL) ? ENOENT : 0;
   if (error == 0) {
-    *port_id = port->kp_id;
+    *id = port->kp_id;
     mutex_exit(&port->kp_interlock);
   }
   return error;
@@ -333,11 +297,11 @@ kport_write_etc(struct lwp *l, port_id id, int32_t code, void *data, size_t size
       return EAGAIN;
     }
     else {
-      t = (flags & PORT_TIMEOUT) ? mstohz(timeout / 1000) : 0; /* XXX: ==> ts2timo()? */
+      t = (flags & PORT_TIMEOUT) ? timeout : 0; /* XXX: ==> ts2timo()? */
       port->kp_waiters++;
       error = cv_timedwait_sig(&port->kp_rdcv, &port->kp_interlock, t); 
       port->kp_waiters--;
-      if ((port->kp_state == kp_deleted) && (port->waiters == 0)) { /* port has been logically destroyed, and we are the last waiter */
+      if ((port->kp_state == kp_deleted) && (port->kp_waiters == 0)) { /* port has been logically destroyed, and we are the last waiter */
         kport_delete_physical(port);
         return ENOENT;
       }
@@ -377,10 +341,10 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
 {
   struct kport *port;
   struct kp_msg *msg;
-  kauth_cred_t uc;
+  //kauth_cred_t uc;
   int error, copyout_size, t;
   
-  uc = l->l_cred;
+  //uc = l->l_cred;
   
   mutex_enter(&kport_mutex);
   port = kport_lookup_byid(id);
@@ -390,10 +354,6 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   }
   mutex_exit(&kport_mutex);
   
-  if (timeout && (flags < 0)) {
-    mutex_exit(&port->kp_interlock);
-    return EINVAL;
-  }
   if (port->kp_state == kp_deleted) {
     mutex_exit(&port->kp_interlock);
     return ENOENT;
@@ -405,11 +365,11 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
       return EAGAIN;
     }
     else {
-      t = (flags & PORT_TIMEOUT) ? mstohz(timeout / 1000) : 0;
+      t = (flags & PORT_TIMEOUT) ? timeout  : 0;
       port->kp_waiters++;
       error = cv_timedwait_sig(&port->kp_wrcv, &port->kp_interlock, t); /* XXX: microseconds? */
       port->kp_waiters--;
-      if ((port->kp_state == kp_deleted) && (port->waiters == 0)) { /* port has been logically destroyed, and we are the last waiter */
+      if ((port->kp_state == kp_deleted) && (port->kp_waiters == 0)) { /* port has been logically destroyed, and we are the last waiter */
         kport_delete_physical(port);
         return ENOENT;
       }
@@ -422,7 +382,7 @@ kport_read_etc(struct lwp *l, port_id id, int32_t *code, void *data, size_t size
   }
   
   msg = SIMPLEQ_FIRST(&port->kp_msgq);
-  copyout_size = (msg->size > size) ? size : msg_size;
+  copyout_size = (msg->kp_msg_size > size) ? size : msg->kp_msg_size;
   *code = msg->kp_msg_code;
   error = copyout(msg->kp_msg_buffer, data, copyout_size);
   if (error) {
@@ -458,7 +418,7 @@ sys_create_port(struct lwp *l, const struct sys_create_port_args *uap, register_
 }
 
 int
-write_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval)
+sys_write_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *retval)
 {
         /* {
                 syscallarg(int) port_id;
@@ -475,7 +435,8 @@ write_port(struct lwp *l, const struct sys_write_port_args *uap, register_t *ret
   return error;
 }
 
-int write_port_etc(struct lwp *l, const struct sys_write_port_etc_args *uap, register_t *retval)
+int
+sys_write_port_etc(struct lwp *l, const struct sys_write_port_etc_args *uap, register_t *retval)
 {
         /* {
                 syscallarg(int) port_id;
@@ -495,7 +456,7 @@ int write_port_etc(struct lwp *l, const struct sys_write_port_etc_args *uap, reg
 }
 
 int
-read_port(struct lwp *l, const struct sys_read_port_args *uap, register_t *retval)
+sys_read_port(struct lwp *l, const struct sys_read_port_args *uap, register_t *retval)
 {
         /* {
                 syscallarg(int) port_id;
@@ -514,7 +475,7 @@ read_port(struct lwp *l, const struct sys_read_port_args *uap, register_t *retva
 }
 
 int
-read_port_etc(struct lwp *l, const struct sys_read_port_etc_args *uap, register_t *retval)
+sys_read_port_etc(struct lwp *l, const struct sys_read_port_etc_args *uap, register_t *retval)
 {
         /* {
                 syscallarg(int) port_id;
@@ -527,7 +488,7 @@ read_port_etc(struct lwp *l, const struct sys_read_port_etc_args *uap, register_
   int error;
   int nread;
   
-  error = kport_read_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), flags, timeout, &nread);
+  error = kport_read_etc(l, SCARG(uap, port_id), SCARG(uap, msg_code), SCARG(uap, msg_buffer), SCARG(uap, buffer_size), SCARG(uap, flags), SCARG(uap, timeout), &nread);
   if (error == 0)
     *retval = nread;
 
@@ -535,7 +496,7 @@ read_port_etc(struct lwp *l, const struct sys_read_port_etc_args *uap, register_
 }
 
 int
-close_port(struct lwp *l, const struct sys_close_port_args *uap, register_t *retval) {
+sys_close_port(struct lwp *l, const struct sys_close_port_args *uap, register_t *retval) {
        /* {
                 syscallarg(int) port_id;
           } */
@@ -549,7 +510,7 @@ close_port(struct lwp *l, const struct sys_close_port_args *uap, register_t *ret
 }
 
 int
-delete_port(struct lwp *l, const struct sys_delete_port_args *uap, register_t *retval) {
+sys_delete_port(struct lwp *l, const struct sys_delete_port_args *uap, register_t *retval) {
        /* {
                 syscallarg(int) port_id;
           } */
@@ -563,19 +524,19 @@ delete_port(struct lwp *l, const struct sys_delete_port_args *uap, register_t *r
 }
 
 int
-find_port(struct lwp *l, const struct sys_find_port_args *uap, register_t *retval) {
+sys_find_port(struct lwp *l, const struct sys_find_port_args *uap, register_t *retval) {
        /* {
                syscallarg(const char *) port_name;
           } */
-  int error, port_id;
-  error = kport_find(SCARG(uap, port_name), &port_id);
+  int error, id;
+  error = kport_find(SCARG(uap, port_name), &id);
   if (error == 0)
-    *retval = port_id;
+    *retval = id;
   return error;
 }
 
 int
-port_count(struct lwp *l, const struct sys_port_count_args *uap, register_t *retval) {
+sys_port_count(struct lwp *l, const struct sys_port_count_args *uap, register_t *retval) {
        /* {
                syscallarg(int) port_id;
           } */
@@ -585,3 +546,4 @@ port_count(struct lwp *l, const struct sys_port_count_args *uap, register_t *ret
     *retval = count;
   return error;
 }
+
